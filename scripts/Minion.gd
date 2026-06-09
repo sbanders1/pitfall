@@ -84,13 +84,24 @@ func _physics_process(delta: float) -> void:
 		_die()
 		return
 
-	var e = _nearest_enemy()
+	var e = null
 	var target_pos: Vector3
-	if e:
-		target_pos = e.global_position
+	var w = _world()
+	if w and w.horde_stance() == 1:
+		# HOLD THE LINE: peel off and hurl yourself into the dark to slow it.
+		var wz: float = w.wall_front_z()
+		if global_position.z >= wz - 80.0:
+			w.on_skull_sacrificed()
+			queue_free()
+			return
+		target_pos = Vector3(global_position.x, 0.0, wz)
 	else:
-		var p = _player()
-		target_pos = (p.global_position + wander) if p else global_position
+		e = _nearest_enemy()
+		if e:
+			target_pos = e.global_position
+		else:
+			var p = _player()
+			target_pos = (p.global_position + wander) if p else global_position
 
 	var to := target_pos - global_position
 	to.y = 0.0
@@ -137,6 +148,10 @@ func _camera():
 
 func _player():
 	var a := get_tree().get_nodes_in_group("player")
+	return a[0] if a.size() > 0 else null
+
+func _world():
+	var a := get_tree().get_nodes_in_group("world")
 	return a[0] if a.size() > 0 else null
 
 func take_damage(d: float) -> void:

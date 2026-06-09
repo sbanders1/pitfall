@@ -13,13 +13,13 @@ func _ready() -> void:
 	var bg := ColorRect.new()
 	bg.color = Color(0.03, 0.02, 0.06, 0.92)
 	bg.position = Vector2(832, 14)
-	bg.size = Vector2(432, 560)
+	bg.size = Vector2(432, 690)
 	add_child(bg)
 
 	root = VBoxContainer.new()
 	root.position = Vector2(852, 26)
 	root.custom_minimum_size = Vector2(394, 0)
-	root.add_theme_constant_override("separation", 8)
+	root.add_theme_constant_override("separation", 5)
 	add_child(root)
 
 	_header("TUNING — F1 to close", Color(0.6, 1.0, 0.6))
@@ -35,6 +35,11 @@ func _ready() -> void:
 	_row("Brake +/-", "enemy_brake_div", 0.0, 0.8, 0.01, 2)
 	_header("Combat", Color(0.9, 0.8, 0.4))
 	_check("Keep my speed when I ram", "ram_keep_speed")
+	_header("The Doom", Color(1.0, 0.4, 0.35))
+	_row("Wall speed (xTop)", "wall_base", 0.3, 1.6, 0.02, 2)
+	_row("Wall ramp /s", "wall_ramp", 0.0, 40.0, 0.5, 1)
+	_row("Push / kill", "wall_push_kill", 0.0, 800.0, 20.0, 0)
+	_row("Push / skull", "wall_push_skull", 0.0, 600.0, 20.0, 0)
 
 func toggle() -> void:
 	visible = not visible

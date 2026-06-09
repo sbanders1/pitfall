@@ -137,6 +137,9 @@ func take_damage(d: float) -> void:
 func _die() -> void:
 	Build.add_souls(2)   # harvested fuel for raising the dead
 	Build.add_xp(4)      # and progress toward your next level
+	var w := get_tree().get_nodes_in_group("world")
+	if w.size() > 0:
+		w[0].on_kill()   # a felled pursuer buys ground against the dark
 	var c := Corpse.new()
 	c.spawn_pos = global_position
 	get_parent().add_child.call_deferred(c)

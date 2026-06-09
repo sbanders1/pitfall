@@ -71,7 +71,7 @@ const SKILLS := [
 		"cost": 2,
 		"req": ["bone_riders"],
 		"pos": Vector2(260, 100),
-		"desc": "Every minion in your legion feeds your engine. The bigger the horde at your back, the faster you fly. Raise an army and outrun the world.",
+		"desc": "Every minion in your horde feeds your engine — hard. A full legion at your back hurls you forward fast enough to outrun the dark itself. Speed IS survival.",
 	},
 	{
 		"id": "necrotic_bloom",

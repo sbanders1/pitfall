@@ -31,6 +31,21 @@ var layer := 1
 var goal_depth := 1000     # absolute depth (m) that clears the current layer
 const LAYER_STRIDE := 1000  # each layer is this much deeper than the last
 
+# The Doom — a wall of dark that chases you up out of the pit. Stay ahead of it or the
+# run ends. Kills and skeletons hurled into it (Q = HOLD) buy back distance.
+var wall: Node3D
+var wall_mat: StandardMaterial3D
+var gap := 1200.0          # distance from you to the wall's leading edge
+var run_time := 0.0
+var wall_flash := 0.0      # brief emission spike when the horde slams it back
+var dead := false
+var best := 0
+var stance := 0            # 0 = HUNT (chase rivals), 1 = HOLD (hurl horde at the wall)
+const GAP_START := 1200.0
+const GAP_MAX := 1700.0
+const STANCE_HUNT := 0
+const STANCE_HOLD := 1
+
 func _ready() -> void:
 	randomize()
 	road_half = num_lanes * lane_w / 2.0
@@ -51,11 +66,9 @@ func _ready() -> void:
 
 	# The necromancer rides in with two persistent summoned death cars — your means
 	# of killing rivals without ever touching them yourself.
-	for off in [Vector3(-150.0, 0.0, 80.0), Vector3(150.0, 0.0, 80.0)]:
-		var d := DeathCar.new()
-		d.slot = off
-		d.position = player.global_position + off
-		add_child(d)
+	_spawn_death_cars()
+	_build_wall()
+	gap = GAP_START
 
 	hud = HUD.new()
 	add_child(hud)
@@ -72,9 +85,12 @@ func _ready() -> void:
 	_treadmill()
 
 func _process(delta: float) -> void:
-	if get_tree().paused:
+	if get_tree().paused or dead:
 		return
 	_treadmill()
+	_update_wall(delta)
+	if dead:
+		return
 	spawn_timer -= delta
 	var count := get_tree().get_nodes_in_group("enemy").size()
 	# Only a handful of hunters at once — 4 at the surface, creeping up as you descend.
@@ -108,11 +124,109 @@ func depth_m() -> int:
 func _check_goal() -> void:
 	if depth_m() < goal_depth:
 		return
-	var cleared := layer
-	layer += 1
+	layer += 1   # tracked for the traffic-density ramp
 	goal_depth += LAYER_STRIDE
 	Build.add_souls(8)
-	hud.flash("LAYER %d CLEARED — +8 souls. The pit deepens..." % cleared)
+	hud.flash("CHECKPOINT — +8 souls. Keep climbing out!")
+
+func _update_wall(delta: float) -> void:
+	run_time += delta
+	# The wall paces YOUR top speed and relentlessly accelerates past it — early on you
+	# can pull ahead by flooring it, but soon raw speed alone won't keep you clear.
+	var wall_speed := Tune.player_top * Tune.wall_base + Tune.wall_ramp * run_time
+	var pspeed := player.velocity.length()
+	gap += (pspeed - wall_speed) * delta
+	gap = minf(gap, GAP_MAX)
+	if gap <= 0.0:
+		end_run("THE DARK SWALLOWED YOU")
+		return
+	wall.position = Vector3(0.0, 0.0, player.global_position.z + gap + 70.0)
+	wall_flash = maxf(0.0, wall_flash - delta)
+	wall_mat.emission_energy_multiplier = 1.6 + 0.6 * sin(run_time * 6.0) + wall_flash * 12.0
+
+func wall_front_z() -> float:
+	return player.global_position.z + gap
+
+func horde_stance() -> int:
+	return stance
+
+func on_kill() -> void:
+	# A felled pursuer buys you ground against the dark.
+	gap = minf(gap + Tune.wall_push_kill, GAP_MAX)
+
+func on_skull_sacrificed() -> void:
+	# A skeleton hurled into the wall shoves it back, and the dark recoils with a flash.
+	gap = minf(gap + Tune.wall_push_skull, GAP_MAX)
+	wall_flash = 0.18
+
+func end_run(reason: String) -> void:
+	if dead:
+		return
+	dead = true
+	var dist := depth_m()
+	best = max(best, dist)
+	get_tree().paused = true
+	hud.game_over(reason, dist, best)
+
+func _reset_run() -> void:
+	for g in ["enemy", "minion", "corpse", "deathcar", "miasma"]:
+		for n in get_tree().get_nodes_in_group(g):
+			n.queue_free()
+	Build.reset()
+	Build.add_souls(12)
+	player.global_position = Vector3.ZERO
+	player.velocity = Vector3.ZERO
+	player.hp = player.max_hp
+	player.heading = 0.0
+	_spawn_death_cars()
+	gap = GAP_START
+	run_time = 0.0
+	accum = 0.0
+	layer = 1
+	goal_depth = 1000
+	stance = STANCE_HUNT
+	spawn_timer = 0.0
+	dead = false
+	get_tree().paused = false
+	_treadmill()
+
+func _spawn_death_cars() -> void:
+	for off in [Vector3(-150.0, 0.0, 80.0), Vector3(150.0, 0.0, 80.0)]:
+		var d := DeathCar.new()
+		d.slot = off
+		d.position = player.global_position + off
+		add_child(d)
+
+func _build_wall() -> void:
+	wall = Node3D.new()
+	add_child(wall)
+	var w := road_half * 2.0 + 3200.0
+	# Dark towering slab that blots out the road behind you.
+	var slab := MeshInstance3D.new()
+	var bm := BoxMesh.new()
+	bm.size = Vector3(w, 1600.0, 140.0)
+	slab.mesh = bm
+	var dm := StandardMaterial3D.new()
+	dm.albedo_color = Color(0.05, 0.0, 0.02)
+	dm.roughness = 1.0
+	slab.material_override = dm
+	slab.position = Vector3(0.0, 600.0, 0.0)
+	wall.add_child(slab)
+	# Molten glowing bands up the leading face — the dark, churning and hungry.
+	wall_mat = StandardMaterial3D.new()
+	wall_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	wall_mat.albedo_color = Color(0.95, 0.12, 0.06)
+	wall_mat.emission_enabled = true
+	wall_mat.emission = Color(1.0, 0.2, 0.05)
+	wall_mat.emission_energy_multiplier = 2.0
+	for i in range(0, 6):
+		var band := MeshInstance3D.new()
+		var bmm := BoxMesh.new()
+		bmm.size = Vector3(w, 60.0 if i == 0 else 24.0, 24.0)
+		band.mesh = bmm
+		band.material_override = wall_mat
+		band.position = Vector3(0.0, 40.0 + i * 230.0, -78.0)
+		wall.add_child(band)
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
@@ -122,6 +236,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			_raise_dead()
 		elif event.keycode == KEY_F1:
 			settings_ui.toggle()
+		elif event.keycode == KEY_Q:
+			stance = STANCE_HOLD if stance == STANCE_HUNT else STANCE_HUNT
+			hud.flash("Horde: %s" % ("HOLD THE LINE — hurl them at the dark!" if stance == STANCE_HOLD else "HUNT the pack"))
 
 const SOUL_PER_RAISE := 2   # souls burned to tear each skeleton out of the dirt
 
@@ -160,6 +277,7 @@ func _spawn_enemy() -> void:
 	# Spawn BEHIND the player (larger Z = further back), in a lane. The rival's
 	# rubber-band then surges it up into view to hunt you.
 	var behind := randf_range(700.0, 1500.0)
+	behind = minf(behind, maxf(300.0, gap - 300.0))   # always spawn between you and the wall
 	var x := lane_center(randi() % num_lanes)
 	e.spawn_pos = Vector3(x, 0.0, player.global_position.z + behind)
 	add_child(e)

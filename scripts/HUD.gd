@@ -16,6 +16,9 @@ var flash_t := 0.0
 var disp_level := 1
 var disp_points := 0
 var initialized := false
+var over_bg: ColorRect
+var over_lbl: Label
+var game_over_on := false
 
 const HP_BAR_W := 420.0
 const HP_BAR_H := 38.0
@@ -67,9 +70,27 @@ func _ready() -> void:
 	xp_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(xp_fill)
 
-	var help := _label(Vector2(24, 680), 22)
+	var help := _label(Vector2(24, 680), 20)
 	help.modulate = Color(0.75, 0.75, 0.85)
-	help.text = "↑/W accelerate   ·   ↓/S brake   ·   ←→/AD steer   ·   SPACE raise dead (souls)   ·   TAB tree   ·   F1 tune"
+	help.text = "↑/W accel  ·  ↓/S brake  ·  ←→ steer  ·  SPACE raise (souls)  ·  Q hold/hunt horde  ·  TAB tree  ·  F1 tune"
+
+	# Game-over overlay (hidden until the dark takes you).
+	over_bg = ColorRect.new()
+	over_bg.color = Color(0.0, 0.0, 0.0, 0.84)
+	over_bg.position = Vector2.ZERO
+	over_bg.size = vp
+	over_bg.visible = false
+	over_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(over_bg)
+	over_lbl = Label.new()
+	over_lbl.position = Vector2(0, vp.y * 0.30)
+	over_lbl.size = Vector2(vp.x, vp.y * 0.4)
+	over_lbl.add_theme_font_size_override("font_size", 38)
+	over_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	over_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	over_lbl.visible = false
+	over_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(over_lbl)
 
 	Build.souls_changed.connect(_on_souls)
 	Build.xp_changed.connect(_on_xp)
@@ -88,9 +109,10 @@ func _process(delta: float) -> void:
 	var minions := get_tree().get_nodes_in_group("minion").size()
 	var cap := 24 if Build.has("legion") else 10
 	var w = _world()
-	var layer = w.layer if w else 1
-	var goal = w.goal_depth if w else 1000
-	info_lbl.text = "LAYER %d   ·   Descent %d / %dm   ·   Horde %d/%d" % [layer, _depth(), goal, minions, cap]
+	var gap_m: int = int(w.gap / 10.0) if w else 0
+	var holding: bool = w != null and w.horde_stance() == 1
+	info_lbl.text = "ESCAPED %dm   ·   DOOM %dm back   ·   Horde %d/%d [%s]" % [_depth(), gap_m, minions, cap, "HOLD" if holding else "HUNT"]
+	info_lbl.modulate = Color(1.0, 0.35, 0.35) if gap_m < 50 else Color(1, 1, 1)
 
 	var hp := _player_hp()
 	var mx := _player_maxhp()
@@ -124,6 +146,28 @@ func _update_lvl_lbl() -> void:
 func flash(msg: String) -> void:
 	flash_lbl.text = msg
 	flash_t = 2.5
+
+func game_over(reason: String, dist: int, best: int) -> void:
+	game_over_on = true
+	over_bg.visible = true
+	over_lbl.visible = true
+	over_lbl.text = "%s\n\nYou clawed up %d m.    Best: %d m\n\nPress SPACE to fall back in and try again." % [reason, dist, best]
+
+func hide_game_over() -> void:
+	game_over_on = false
+	over_bg.visible = false
+	over_lbl.visible = false
+
+func _input(event: InputEvent) -> void:
+	if not game_over_on:
+		return
+	if event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode == KEY_SPACE or event.keycode == KEY_ENTER:
+			var w = _world()
+			if w:
+				w._reset_run()
+			hide_game_over()
+			get_viewport().set_input_as_handled()
 
 func _world():
 	var a := get_tree().get_nodes_in_group("world")

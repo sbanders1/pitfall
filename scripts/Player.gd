@@ -16,6 +16,12 @@ var max_hp := 100.0
 var radius := 18.0
 var invuln := 0.0
 var cam: Camera3D
+const CAM_HEIGHT := 360.0     # camera height above the road
+const CAM_FRONT := -560.0     # camera sits this far in FRONT of the car (-Z is forward)
+const CAM_LOOK := 220.0       # ...and aims at a point this far BEHIND it
+const CAM_SLIDE := 300.0      # how far it drifts sideways into your steering
+var _cam_x := 0.0             # smoothed lateral position of the rig
+var _cam_basis: Basis         # fixed look-back orientation — never yaws with the car
 
 func _ready() -> void:
 	collision_layer = 2
@@ -56,20 +62,24 @@ func _ready() -> void:
 
 	# High chase cam: child of the car so it always rides behind the nose, pitched
 	# down enough to keep the road ahead AND the horde behind mostly in frame.
-	# REAR-VIEW camera: it sits in FRONT of the car (forward is -Z) and looks BACK over
-	# the tail, so the screen always shows what's chasing you. Driving forward becomes
-	# watching your six — the whole game is about keeping pursuers off your bumper.
+	# REAR-VIEW camera: it sits in FRONT of the car and looks BACK over the tail, so the
+	# screen always shows what's chasing you. Crucially it holds a FIXED look-back angle
+	# (it never yaws with the car) — _update_camera only slides it sideways into your
+	# turns, which is far more comfortable than rotating a backward-facing view.
 	cam = Camera3D.new()
 	cam.fov = 60.0
 	cam.far = 9000.0
 	add_child(cam)
-	cam.transform = Transform3D(Basis(), Vector3(0.0, 360.0, -560.0)).looking_at(Vector3(0.0, 0.0, 220.0), Vector3.UP)
+	_cam_basis = Transform3D(Basis(), Vector3(0.0, CAM_HEIGHT, CAM_FRONT)).looking_at(Vector3(0.0, 0.0, CAM_LOOK), Vector3.UP).basis
+	_cam_x = global_position.x
 	cam.make_current()
+	_update_camera()
 
 func current_max_speed() -> float:
 	var m := Tune.player_top
 	if Build.has("dark_momentum"):
-		m += get_tree().get_nodes_in_group("minion").size() * 24.0
+		# A full horde hurls you forward fast enough to outrun the dark itself.
+		m += get_tree().get_nodes_in_group("minion").size() * 60.0
 	return m
 
 func _physics_process(delta: float) -> void:
@@ -113,9 +123,17 @@ func _physics_process(delta: float) -> void:
 	move_and_slide()
 	global_position.y = 0.0                # stay pinned to the ground plane
 	_check_ram()
+	_update_camera()
 
 func _forward() -> Vector3:
 	return Vector3(sin(heading), 0.0, -cos(heading))
+
+func _update_camera() -> void:
+	# Hold the fixed look-back angle and only slide sideways in the direction you're
+	# steering — the car yaws beneath it, the camera doesn't. Smoothed so it eases over.
+	var slide := sin(heading) * CAM_SLIDE
+	_cam_x = lerpf(_cam_x, global_position.x + slide, 0.2)
+	cam.global_transform = Transform3D(_cam_basis, Vector3(_cam_x, CAM_HEIGHT, global_position.z + CAM_FRONT))
 
 func _check_ram() -> void:
 	var spd := velocity.length()
@@ -139,8 +157,7 @@ func take_damage(d: float) -> void:
 	hp -= d
 	invuln = 0.6
 	if hp <= 0.0:
-		hp = max_hp
-		global_position = Vector3.ZERO
-		velocity = Vector3.ZERO
-		heading = 0.0
-		invuln = 1.5
+		hp = 0.0
+		var w := get_tree().get_nodes_in_group("world")
+		if w.size() > 0:
+			w[0].end_run("WRECKED BY THE PACK")
