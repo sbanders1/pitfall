@@ -1,0 +1,10 @@
+# Godot 4+ import cache and editor data
+.godot/
+
+# Exported builds
+/build/
+/export/
+*.translation
+
+# OS / editor cruft
+.DS_Store
