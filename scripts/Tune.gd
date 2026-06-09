@@ -9,9 +9,13 @@ var player_top := 1050.0     # your maximum speed
 var player_brake := 2000.0   # how hard DOWN/S sheds speed
 var player_turn := 3.4       # steering rate (rad/s)
 
-# Enemy handling
-var enemy_top := 880.0        # rival base chase speed (each rival varies a little)
-var enemy_turn := 2.2         # rival base turn rate (rad/s)
+# Enemy handling — defined RELATIVE to the player so rivals stay catchable and don't
+# fly off. Each rival rolls a fixed spot inside these ± bands, and paces around your
+# current speed. Set a divergence to 0 to make rivals mechanically identical to you.
+var enemy_turn := 2.2         # rival turn rate (rad/s)
+var enemy_speed_div := 0.12   # how much their top speed varies around yours (± fraction)
+var enemy_accel_div := 0.25   # how much punchier/softer their acceleration is than yours
+var enemy_brake_div := 0.25   # ...and their braking
 
 # Combat
 var ram_keep_speed := true    # if true, ramming a rival no longer bleeds your speed

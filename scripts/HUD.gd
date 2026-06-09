@@ -9,10 +9,18 @@ var flash_lbl: Label
 var hp_back: ColorRect
 var hp_fill: ColorRect
 var hp_lbl: Label
+var lvl_lbl: Label
+var xp_back: ColorRect
+var xp_fill: ColorRect
 var flash_t := 0.0
+var disp_level := 1
+var disp_points := 0
+var initialized := false
 
 const HP_BAR_W := 420.0
 const HP_BAR_H := 38.0
+const XP_BAR_W := 300.0
+const XP_BAR_H := 16.0
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -38,12 +46,40 @@ func _ready() -> void:
 	flash_lbl = _label(Vector2(24, 178), 32)
 	flash_lbl.modulate = Color(1, 0.9, 0.4)
 
+	# Level + XP readout, top-right. Levelling is how you earn skill-tree points.
+	var vp := get_viewport().get_visible_rect().size
+	if vp.x < 10.0:
+		vp = Vector2(1280, 720)
+	var rx := vp.x - XP_BAR_W - 24.0
+	lvl_lbl = _label(Vector2(rx, 16), 32)
+	lvl_lbl.modulate = Color(0.75, 0.85, 1.0)
+
+	xp_back = ColorRect.new()
+	xp_back.position = Vector2(rx, 60)
+	xp_back.size = Vector2(XP_BAR_W, XP_BAR_H)
+	xp_back.color = Color(0.06, 0.08, 0.14, 0.9)
+	xp_back.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(xp_back)
+	xp_fill = ColorRect.new()
+	xp_fill.position = Vector2(rx + 2.0, 62)
+	xp_fill.size = Vector2(XP_BAR_W - 4.0, XP_BAR_H - 4.0)
+	xp_fill.color = Color(0.4, 0.6, 1.0)
+	xp_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(xp_fill)
+
 	var help := _label(Vector2(24, 680), 22)
 	help.modulate = Color(0.75, 0.75, 0.85)
-	help.text = "↑/W accelerate   ·   ↓/S brake   ·   ←→/AD steer   ·   SPACE raise dead   ·   TAB tree   ·   F1 tune"
+	help.text = "↑/W accelerate   ·   ↓/S brake   ·   ←→/AD steer   ·   SPACE raise dead (souls)   ·   TAB tree   ·   F1 tune"
 
 	Build.souls_changed.connect(_on_souls)
+	Build.xp_changed.connect(_on_xp)
+	Build.level_changed.connect(_on_level)
+	Build.points_changed.connect(_on_points)
 	_on_souls(Build.souls)
+	_on_level(Build.level)
+	_on_points(Build.skill_points)
+	_on_xp(Build.xp, Build.xp_to_next())
+	initialized = true
 
 func _process(delta: float) -> void:
 	flash_t = max(0.0, flash_t - delta)
@@ -66,6 +102,24 @@ func _process(delta: float) -> void:
 func _on_souls(amount: int) -> void:
 	souls_lbl.text = "SOULS  %d" % amount
 	souls_lbl.modulate = Color(0.6, 1.0, 0.6)
+
+func _on_xp(xp: int, needed: int) -> void:
+	var frac: float = clamp(float(xp) / float(needed), 0.0, 1.0) if needed > 0 else 0.0
+	xp_fill.size.x = (XP_BAR_W - 4.0) * frac
+
+func _on_level(level: int) -> void:
+	disp_level = level
+	_update_lvl_lbl()
+	if initialized:
+		flash("LEVEL %d!  +1 skill point — press TAB to spend" % level)
+
+func _on_points(points: int) -> void:
+	disp_points = points
+	_update_lvl_lbl()
+
+func _update_lvl_lbl() -> void:
+	lvl_lbl.text = "LV %d   ·   %d PTS" % [disp_level, disp_points]
+	lvl_lbl.modulate = Color(1.0, 0.85, 0.35) if disp_points > 0 else Color(0.75, 0.85, 1.0)
 
 func flash(msg: String) -> void:
 	flash_lbl.text = msg

@@ -13,7 +13,7 @@ func _ready() -> void:
 	var bg := ColorRect.new()
 	bg.color = Color(0.03, 0.02, 0.06, 0.92)
 	bg.position = Vector2(832, 14)
-	bg.size = Vector2(432, 486)
+	bg.size = Vector2(432, 560)
 	add_child(bg)
 
 	root = VBoxContainer.new()
@@ -28,9 +28,11 @@ func _ready() -> void:
 	_row("Top Speed", "player_top", 300.0, 3000.0, 50.0, 0)
 	_row("Braking", "player_brake", 300.0, 5000.0, 50.0, 0)
 	_row("Turn Speed", "player_turn", 1.0, 8.0, 0.1, 1)
-	_header("Enemies", Color(1.0, 0.5, 0.5))
-	_row("Top Speed", "enemy_top", 200.0, 3000.0, 50.0, 0)
+	_header("Enemies (relative to you)", Color(1.0, 0.5, 0.5))
 	_row("Turn Rate", "enemy_turn", 0.5, 6.0, 0.1, 1)
+	_row("Speed +/-", "enemy_speed_div", 0.0, 0.6, 0.01, 2)
+	_row("Accel +/-", "enemy_accel_div", 0.0, 0.8, 0.01, 2)
+	_row("Brake +/-", "enemy_brake_div", 0.0, 0.8, 0.01, 2)
 	_header("Combat", Color(0.9, 0.8, 0.4))
 	_check("Keep my speed when I ram", "ram_keep_speed")
 
@@ -88,4 +90,4 @@ func _check(title: String, prop: String) -> void:
 func _fmt(v: float, decimals: int) -> String:
 	if decimals <= 0:
 		return "%d" % int(round(v))
-	return "%.1f" % v
+	return String.num(v, decimals)

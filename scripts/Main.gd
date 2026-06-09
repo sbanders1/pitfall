@@ -2,7 +2,7 @@ extends Node3D
 # World root (3D). An ENDLESS forward corridor built as a treadmill: the road and
 # rails ride with the player, the roadside pylons snap to a fixed grid so they stream
 # past, and the whole world is periodically rebased back toward the origin so float
-# coordinates never grow large. Rivals spawn ahead and are culled behind.
+# coordinates never grow large. Rivals spawn behind and surge up into view.
 #
 # Coordinate convention: X = lateral / lanes,  Y = up (ground = Y0),  -Z = forward.
 
@@ -20,8 +20,8 @@ var raise_radius := 360.0
 var surface: Node3D        # road + rails; rides with the player (uniform, so invisible)
 var pylons: Node3D         # roadside markers; snaps to a grid so they appear planted
 var accum := 0.0           # total distance rebased away — keeps depth continuous
-const VIEW_AHEAD := 30000.0
-const VIEW_BEHIND := 6000.0
+const VIEW_AHEAD := 8000.0    # little is shown ahead now — the rear-view camera looks back
+const VIEW_BEHIND := 20000.0  # deep coverage of the road BEHIND you, so it fades into fog
 const PYL_SPACING := 300.0
 const REBASE_STEP := 18000.0   # must be a whole number of PYL_SPACING
 
@@ -67,8 +67,8 @@ func _ready() -> void:
 	settings_ui = SettingsPanel.new()
 	add_child(settings_ui)
 
-	# A few starting souls so the very first decision (Raise Dead) is immediate.
-	Build.add_souls(3)
+	# A pool of starting souls so you can raise the dead from the very first corpse.
+	Build.add_souls(12)
 	_treadmill()
 
 func _process(delta: float) -> void:
@@ -111,8 +111,8 @@ func _check_goal() -> void:
 	var cleared := layer
 	layer += 1
 	goal_depth += LAYER_STRIDE
-	Build.add_souls(5)
-	hud.flash("LAYER %d CLEARED — +5 souls. The pit deepens..." % cleared)
+	Build.add_souls(8)
+	hud.flash("LAYER %d CLEARED — +8 souls. The pit deepens..." % cleared)
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
@@ -123,39 +123,45 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif event.keycode == KEY_F1:
 			settings_ui.toggle()
 
+const SOUL_PER_RAISE := 2   # souls burned to tear each skeleton out of the dirt
+
 func _raise_dead() -> void:
 	if not Build.has("raise_dead"):
 		hud.flash("Unlock RAISE DEAD first — press TAB")
+		return
+	if Build.souls < SOUL_PER_RAISE:
+		hud.flash("Not enough souls — kill rivals to harvest more (%d per skeleton)" % SOUL_PER_RAISE)
 		return
 	var cap := 24 if Build.has("legion") else 10
 	var current := get_tree().get_nodes_in_group("minion").size()
 	if current >= cap:
 		hud.flash("Horde at capacity (%d) — unlock LEGION for a bigger army" % cap)
 		return
-	var arc := raise_radius * (1.6 if Build.has("legion") else 1.0)
-	var per_corpse := 3 if Build.has("legion") else 1   # Legion: a crowd from every body
-	var raised := 0
-	for c in get_tree().get_nodes_in_group("corpse"):
-		if current + raised >= cap:
-			break
-		if player.global_position.distance_to(c.global_position) < arc:
-			var n: int = min(per_corpse, cap - (current + raised))
-			c.raise_into_minion(n)
-			raised += n
-	if raised == 0:
-		hud.flash("No corpses in range — go make some.")
-	else:
-		hud.flash("Raised %d from the dead!" % raised)
+	# Summon anywhere: skeletons claw up at your wheels, no corpse required. You raise
+	# as many as both the horde cap AND your soul reserve allow (3 at once with Legion).
+	var want: int = 3 if Build.has("legion") else 1
+	var affordable: int = Build.souls / SOUL_PER_RAISE
+	var count: int = min(want, min(cap - current, affordable))
+	if count <= 0:
+		return
+	Build.spend_souls(count * SOUL_PER_RAISE)
+	for i in count:
+		var m := Minion.new()
+		var off := Vector3(randf_range(-130.0, 130.0), 0.0, randf_range(60.0, 240.0))
+		m.spawn_pos = player.global_position + off
+		add_child(m)
+	hud.flash("Raised %d undead  (-%d souls)" % [count, count * SOUL_PER_RAISE])
 
 func lane_center(i: int) -> float:
 	return -road_half + lane_w * (float(i) + 0.5)
 
 func _spawn_enemy() -> void:
 	var e := Enemy.new()
-	# Spawn ahead of the player (smaller Z = further forward), in a lane.
-	var ahead := randf_range(700.0, 1500.0)
+	# Spawn BEHIND the player (larger Z = further back), in a lane. The rival's
+	# rubber-band then surges it up into view to hunt you.
+	var behind := randf_range(700.0, 1500.0)
 	var x := lane_center(randi() % num_lanes)
-	e.spawn_pos = Vector3(x, 0.0, player.global_position.z - ahead)
+	e.spawn_pos = Vector3(x, 0.0, player.global_position.z + behind)
 	add_child(e)
 
 func _cull_behind() -> void:
@@ -164,7 +170,9 @@ func _cull_behind() -> void:
 	var pz := player.global_position.z
 	for e in get_tree().get_nodes_in_group("enemy"):
 		var dz: float = e.global_position.z - pz
-		if dz > 1300.0 or dz < -2600.0:
+		# Generous behind-window so fresh spawns (which start ~1500 back) get time to
+		# rubber-band up; cull only ones truly abandoned or that shot far ahead.
+		if dz > 2700.0 or dz < -2000.0:
 			e.queue_free()
 
 # --- World construction -----------------------------------------------------

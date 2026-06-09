@@ -56,12 +56,14 @@ func _ready() -> void:
 
 	# High chase cam: child of the car so it always rides behind the nose, pitched
 	# down enough to keep the road ahead AND the horde behind mostly in frame.
+	# REAR-VIEW camera: it sits in FRONT of the car (forward is -Z) and looks BACK over
+	# the tail, so the screen always shows what's chasing you. Driving forward becomes
+	# watching your six — the whole game is about keeping pursuers off your bumper.
 	cam = Camera3D.new()
-	cam.position = Vector3(0.0, 360.0, 560.0)   # +Z is behind the car
-	cam.rotation_degrees = Vector3(-30.0, 0.0, 0.0)
 	cam.fov = 60.0
 	cam.far = 9000.0
 	add_child(cam)
+	cam.transform = Transform3D(Basis(), Vector3(0.0, 360.0, -560.0)).looking_at(Vector3(0.0, 0.0, 220.0), Vector3.UP)
 	cam.make_current()
 
 func current_max_speed() -> float:
@@ -76,9 +78,11 @@ func _physics_process(delta: float) -> void:
 	var throttle := 0.0
 	if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP): throttle += 1.0
 	if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN): throttle -= 1.0
+	# Steering is mirrored to match the rear-view camera: pressing right sends the car
+	# right ON SCREEN, which is the opposite world direction now that we face backward.
 	var steer := 0.0
-	if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT): steer -= 1.0
-	if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT): steer += 1.0
+	if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT): steer += 1.0
+	if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT): steer -= 1.0
 
 	var forward := _forward()
 	var fwd_speed := velocity.dot(forward)
@@ -123,6 +127,11 @@ func _check_ram() -> void:
 			e.take_damage(spd * 0.13)
 			if not Tune.ram_keep_speed:
 				velocity *= 0.55   # crunch — bleed speed on impact
+
+func shove(impulse: Vector3) -> void:
+	# A rival trying to run us off the road bumps our momentum sideways. The grip
+	# model bleeds it off over the next moment, so it's a nudge, not a teleport.
+	velocity += impulse
 
 func take_damage(d: float) -> void:
 	if invuln > 0.0:

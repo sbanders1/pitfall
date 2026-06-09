@@ -62,7 +62,12 @@ func _ready() -> void:
 	add_child(body)
 
 func speed() -> float:
-	return 680.0 if Build.has("bone_riders") else base_speed
+	# All summons ride alongside you — clamped to your current speed, never faster,
+	# so the horde keeps formation at any pace (a small floor lets them creep when
+	# you're nearly stopped). Bone Riders still hit harder; they just don't outrun you.
+	var p = _player()
+	var base: float = p.velocity.length() if p else base_speed
+	return maxf(base, 120.0)
 
 func _physics_process(delta: float) -> void:
 	attack_cd = max(0.0, attack_cd - delta)
@@ -113,14 +118,22 @@ func _drop_miasma(r: float, life: float) -> void:
 	get_parent().add_child.call_deferred(mi)
 
 func _nearest_enemy():
+	# Only hunt rivals that are actually on screen — ignore ones still off-camera.
+	var cam = _camera()
 	var best = null
 	var bd := 1e12
 	for x in get_tree().get_nodes_in_group("enemy"):
+		if cam and not cam.is_position_in_frustum(x.global_position + Vector3(0.0, 13.0, 0.0)):
+			continue
 		var d := global_position.distance_to(x.global_position)
 		if d < bd:
 			bd = d
 			best = x
 	return best
+
+func _camera():
+	var p = _player()
+	return p.cam if p else null
 
 func _player():
 	var a := get_tree().get_nodes_in_group("player")

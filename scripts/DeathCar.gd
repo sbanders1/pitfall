@@ -58,8 +58,11 @@ func _physics_process(delta: float) -> void:
 
 	# Drive forward along the nose. When falling back into formation, ease off the
 	# throttle near the slot so it settles beside you instead of circling.
-	# Stay a touch faster than the player so they can keep formation and run rivals down.
-	var top := Tune.player_top + 120.0
+	# Clamped to your current speed so they ride alongside you the whole way, never
+	# pulling ahead; they ease off near their formation slot when there's nothing to chase.
+	var pl = _player()
+	var top: float = pl.velocity.length() if pl else Tune.player_top
+	top = maxf(top, 120.0)
 	var spd := top
 	if not chasing:
 		spd = clampf(dist * 2.5, 0.0, top)
@@ -74,14 +77,22 @@ func _physics_process(delta: float) -> void:
 		attack_cd = 0.5
 
 func _nearest_enemy():
+	# Only hunt rivals that are actually on screen — ignore ones still off-camera.
+	var cam = _camera()
 	var best = null
 	var bd := 1e12
 	for x in get_tree().get_nodes_in_group("enemy"):
+		if cam and not cam.is_position_in_frustum(x.global_position + Vector3(0.0, 13.0, 0.0)):
+			continue
 		var d := global_position.distance_to(x.global_position)
 		if d < bd:
 			bd = d
 			best = x
 	return best
+
+func _camera():
+	var p = _player()
+	return p.cam if p else null
 
 func _player():
 	var a := get_tree().get_nodes_in_group("player")
